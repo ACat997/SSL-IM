@@ -40,7 +40,7 @@ func InitDB(password string) (*sql.DB, error) {
 func SaveMessage(db *sql.DB, message string) {
 	_, err := db.Exec("INSERT INTO chat_logs (message) VALUES (?);", message)
 	if err != nil {
-		log.Printf("保存聊天记录失败: %v", err)
+		log.Printf("save message err: %v", err)
 	}
 }
 
@@ -49,12 +49,12 @@ func SaveEncryptedMessage(db *sql.DB, message, password string) {
 	key := util.GenerateKey(password)
 	encryptedMessage, err := util.Encrypt(key, message)
 	if err != nil {
-		log.Printf("加密聊天记录失败: %v", err)
+		log.Printf("encrypted message err: %v", err)
 		return
 	}
 	_, err = db.Exec("INSERT INTO chat_logs (message) VALUES (?);", encryptedMessage)
 	if err != nil {
-		log.Printf("保存加密聊天记录失败: %v", err)
+		log.Printf("save encrypted message err: %v", err)
 	}
 }
 
@@ -63,18 +63,18 @@ func GetDecryptedChatLogs(db *sql.DB, password string) ([]string, error) {
 	key := util.GenerateKey(password)
 	rows, err := db.Query("SELECT message FROM chat_logs;")
 	if err != nil {
-		return nil, fmt.Errorf("查询聊天记录失败: %v", err)
+		return nil, fmt.Errorf("get history message err: %v", err)
 	}
 	defer rows.Close()
 	var logs []string
 	for rows.Next() {
 		var encryptedMessage string
 		if err := rows.Scan(&encryptedMessage); err != nil {
-			return nil, fmt.Errorf("读取加密聊天记录失败: %v", err)
+			return nil, fmt.Errorf("get message err : %v", err)
 		}
 		plaintext, err := util.Decrypt(key, encryptedMessage)
 		if err != nil {
-			return nil, fmt.Errorf("解密聊天记录失败: %v", err)
+			return nil, fmt.Errorf("decrypt err: %v", err)
 		}
 		logs = append(logs, plaintext)
 	}
