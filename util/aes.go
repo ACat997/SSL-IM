@@ -35,27 +35,43 @@ func Encrypt(key []byte, plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(result), nil
 }
 
-// Decrypt 使用 AES-GCM 解密数据
 func Decrypt(key []byte, encrypted string) (string, error) {
+	// 确保密钥长度为 16、24 或 32 字节
+	if len(key) != 16 && len(key) != 24 && len(key) != 32 {
+		return "", fmt.Errorf("invalid key length: must be 16, 24, or 32 bytes, got %d bytes", len(key))
+	}
+
+	// Base64 解码
 	data, err := base64.StdEncoding.DecodeString(encrypted)
 	if err != nil {
-		return "", fmt.Errorf("Base64 err: %v", err)
+		return "", fmt.Errorf("failed to decode base64: %v", err)
 	}
+
+	// 提取 nonce 和密文
 	if len(data) < 12 {
-		return "", fmt.Errorf("not enough length")
+		return "", fmt.Errorf("invalid ciphertext: too short")
 	}
-	nonce, ciphertext := data[:12], data[12:]
+	nonce := data[:12]
+	ciphertext := data[12:]
+
+	// 创建 AES Cipher
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return "", fmt.Errorf("创建 AES Cipher 失败: %v", err)
+		return "", fmt.Errorf("failed to create AES cipher: %v", err)
 	}
+
+	// 创建 AES-GCM
 	aesGCM, err := cipher.NewGCM(block)
 	if err != nil {
-		return "", fmt.Errorf("创建 AES-GCM 失败: %v", err)
+		return "", fmt.Errorf("failed to create AES-GCM: %v", err)
 	}
+
+	// 解密
 	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return "", fmt.Errorf("AES 解密失败: %v", err)
+		return "", fmt.Errorf("failed to decrypt: %v", err)
 	}
+
 	return string(plaintext), nil
 }
+

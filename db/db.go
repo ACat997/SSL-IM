@@ -24,11 +24,13 @@ func InitDB(password string) (*sql.DB, error) {
 
 	// 创建聊天记录表
 	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS chat_logs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			message TEXT NOT NULL
-		);
-	`)
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        sender TEXT NOT NULL,                 -- 消息发送方（server 或 client）
+        message TEXT NOT NULL                 -- 消息内容（加密后的）
+    );
+`)
+
 	if err != nil {
 		return nil, err
 	}
@@ -45,38 +47,49 @@ func SaveMessage(db *sql.DB, message string) {
 }
 
 // SaveEncryptedMessage 使用aes加密聊天信息
-func SaveEncryptedMessage(db *sql.DB, message, password string) {
-	key := util.GenerateKey(password)
+func SaveEncryptedMessage(db *sql.DB, sender string, message string, encryptionKey string) error {
+	key := util.GenerateKey(encryptionKey)
 	encryptedMessage, err := util.Encrypt(key, message)
 	if err != nil {
-		log.Printf("encrypted message err: %v", err)
-		return
+		return fmt.Errorf("encryption failed: %v", err)
 	}
-	_, err = db.Exec("INSERT INTO chat_logs (message) VALUES (?);", encryptedMessage)
+	_, err = db.Exec("INSERT INTO messages (sender, message) VALUES (?, ?)", sender, encryptedMessage)
 	if err != nil {
-		log.Printf("save encrypted message err: %v", err)
+		return fmt.Errorf("database insert failed: %v", err)
 	}
+	return nil
 }
 
 // GetDecryptedChatLogs 解密聊天记录
 func GetDecryptedChatLogs(db *sql.DB, password string) ([]string, error) {
+	// 生成解密密钥
 	key := util.GenerateKey(password)
-	rows, err := db.Query("SELECT message FROM chat_logs;")
+
+	// 查询消息记录，包含 sender 和 message
+	rows, err := db.Query("SELECT sender, message FROM messages;")
 	if err != nil {
-		return nil, fmt.Errorf("get history message err: %v", err)
+		return nil, fmt.Errorf("failed to query messages: %v", err)
 	}
 	defer rows.Close()
+
 	var logs []string
 	for rows.Next() {
-		var encryptedMessage string
-		if err := rows.Scan(&encryptedMessage); err != nil {
-			return nil, fmt.Errorf("get message err : %v", err)
+		var sender, encryptedMessage string
+
+		// 读取数据库中 sender 和 message 字段
+		if err := rows.Scan(&sender, &encryptedMessage); err != nil {
+			return nil, fmt.Errorf("failed to read message: %v", err)
 		}
+
+		// 解密消息内容
 		plaintext, err := util.Decrypt(key, encryptedMessage)
 		if err != nil {
-			return nil, fmt.Errorf("decrypt err: %v", err)
+			return nil, fmt.Errorf("failed to decrypt message: %v", err)
 		}
-		logs = append(logs, plaintext)
+
+		// 将 sender 和解密后的消息拼接成可读的日志格式
+		logs = append(logs, fmt.Sprintf("[%s] %s", sender, plaintext))
 	}
+
 	return logs, nil
 }
